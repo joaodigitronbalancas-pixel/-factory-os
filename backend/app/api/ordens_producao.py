@@ -1,118 +1,110 @@
+from fastapi import APIRouter
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional
+from app.core.database import SessionLocal
+from app.models.ordem_producao import OrdemProducao
 from app.models.estrutura_produto import EstruturaProduto
 from app.models.produto import Produto
 from app.models.movimentacao_estoque import MovimentacaoEstoque
-from fastapi import APIRouter
-from app.schemas.ordem_producao import OrdemProducaoCreate
-from app.core.database import SessionLocal
-from app.models.ordem_producao import OrdemProducao
 
-router = APIRouter(
-    prefix="/op",
-    tags=["Ordens de Produção"]
-)
+router = APIRouter(prefix="/op", tags=["Ordens de Produção"])
+
+FLUXO = ["SEPARACAO", "ELETRONICA", "MONTAGEM", "CALIBRACAO", "QUALIDADE", "EXPEDICAO", "FINALIZADA"]
+
+class OrdemProducaoCreate(BaseModel):
+    numero_op: str
+    produto_id: Optional[int] = None
+    quantidade: Optional[float] = 1
+    prioridade: Optional[str] = "MEDIA"
+    observacao: Optional[str] = None
+    data_previsao: Optional[str] = None
+
+@router.get("/")
+def listar():
+    db: Session = SessionLocal()
+    return db.query(OrdemProducao).all()
+
+@router.get("/{id}")
+def buscar(id: int):
+    db: Session = SessionLocal()
+    return db.query(OrdemProducao).filter(OrdemProducao.id == id).first()
 
 @router.post("/")
 def criar_op(dados: OrdemProducaoCreate):
-
     db: Session = SessionLocal()
 
-    estrutura = db.query(EstruturaProduto).filter(
-        EstruturaProduto.produto_pai_id == dados.produto_id
-    ).all()
+    # Verifica BOM se produto informado
+    if dados.produto_id:
+        estrutura = db.query(EstruturaProduto).filter(
+            EstruturaProduto.produto_pai_id == dados.produto_id
+        ).all()
 
-    if not estrutura:
-        return {"erro": "Produto sem estrutura BOM"}
+        if estrutura:
+            for item in estrutura:
+                componente = db.query(Produto).filter(Produto.id == item.componente_id).first()
+                if componente:
+                    total = item.quantidade * dados.quantidade
+                    if componente.estoque_atual < total:
+                        return {"erro": f"Estoque insuficiente: {componente.descricao}"}
 
-    # ✅ valida estoque
-    for item in estrutura:
-        componente = db.query(Produto).filter(
-            Produto.id == item.componente_id
-        ).first()
+            for item in estrutura:
+                componente = db.query(Produto).filter(Produto.id == item.componente_id).first()
+                if componente:
+                    total = item.quantidade * dados.quantidade
+                    componente.estoque_atual -= total
+                    mov = MovimentacaoEstoque(
+                        produto_id=componente.id,
+                        tipo="PRODUCAO",
+                        quantidade=total,
+                        observacao=f"Consumo OP {dados.numero_op}"
+                    )
+                    db.add(mov)
 
-        total = item.quantidade * dados.quantidade
-
-        if componente.estoque_atual < total:
-            return {
-                "erro": f"Estoque insuficiente: {componente.descricao}"
-            }
-
-    # ✅ baixa estoque + registra movimentação
-    for item in estrutura:
-        componente = db.query(Produto).filter(
-            Produto.id == item.componente_id
-        ).first()
-
-        total = item.quantidade * dados.quantidade
-        componente.estoque_atual -= total
-
-        mov = MovimentacaoEstoque(
-            produto_id=componente.id,
-            tipo="PRODUCAO",
-            quantidade=total,
-            observacao=f"Consumo OP {dados.numero_op}"
-        )
-        db.add(mov)
-
-    # ✅ cria OP
-    op = OrdemProducao(**dados.model_dump())
+    op = OrdemProducao(
+        numero_op=dados.numero_op,
+        produto_id=dados.produto_id,
+        quantidade=dados.quantidade,
+        prioridade=dados.prioridade,
+        observacao=dados.observacao,
+        status="ABERTA",
+        setor_atual="SEPARACAO"
+    )
     db.add(op)
-
     db.commit()
     db.refresh(op)
-
     return op
 
 @router.post("/{id}/proximo-setor")
 def proximo_setor(id: int):
-
-    db = SessionLocal()
-
-    op = db.query(
-        OrdemProducao
-    ).filter(
-        OrdemProducao.id == id
-    ).first()
-
+    db: Session = SessionLocal()
+    op = db.query(OrdemProducao).filter(OrdemProducao.id == id).first()
     if not op:
         return {"erro": "OP não encontrada"}
 
-    fluxo = [
-        "SEPARACAO",
-        "ELETRONICA",
-        "MONTAGEM",
-        "CALIBRACAO",
-        "QUALIDADE",
-        "EXPEDICAO"
-    ]
+    setor_atual = op.setor_atual or "SEPARACAO"
 
     try:
-
-        posicao = fluxo.index(
-            op.setor_atual
-        )
-
-        if posicao < len(fluxo) - 1:
-
-            op.setor_atual = fluxo[
-                posicao + 1
-            ]
-
-            op.status = "EM_PRODUCAO"
-
+        posicao = FLUXO.index(setor_atual)
+        if posicao < len(FLUXO) - 1:
+            op.setor_atual = FLUXO[posicao + 1]
+            op.status = "EM_PRODUCAO" if op.setor_atual != "FINALIZADA" else "FINALIZADA"
         else:
-
+            op.setor_atual = "FINALIZADA"
             op.status = "FINALIZADA"
-
         db.commit()
+        return {"id": op.id, "setor_atual": op.setor_atual, "status": op.status}
+    except ValueError:
+        op.setor_atual = FLUXO[0]
+        db.commit()
+        return {"id": op.id, "setor_atual": op.setor_atual, "status": op.status}
 
-        return {
-            "id": op.id,
-            "setor_atual": op.setor_atual,
-            "status": op.status
-        }
-
-    except Exception as e:
-
-        return {
-            "erro": str(e)
-        }
+@router.delete("/{id}")
+def deletar(id: int):
+    db: Session = SessionLocal()
+    op = db.query(OrdemProducao).filter(OrdemProducao.id == id).first()
+    if not op:
+        return {"erro": "OP não encontrada"}
+    db.delete(op)
+    db.commit()
+    return {"ok": True}

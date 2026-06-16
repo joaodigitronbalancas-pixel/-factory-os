@@ -4,11 +4,9 @@ from app.core.database import Base
 
 class MovimentacaoEstoque(Base):
     __tablename__ = "movimentacoes_estoque"
-
-    id = Column(Integer, primary_key=True)
-    produto_id = Column(Integer, ForeignKey("produtos.id"))
-    tipo = Column(String(20))
-    quantidade = Column(Numeric(12,2))
-    observacao = Column(Text)
-    usuario_id = Column(Integer, ForeignKey("usuarios.id"))
-    data_movimentacao = Column(DateTime, server_default=func.now())
+    id = Column(Integer, primary_key=True, index=True)
+    produto_id = Column(Integer, ForeignKey("produtos.id"), nullable=True)
+    tipo = Column(String(50))
+    quantidade = Column(Numeric(12, 2), default=0)
+    observacao = Column(Text, nullable=True)
+    criado_em = Column(DateTime, server_default=func.now())
