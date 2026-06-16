@@ -8,7 +8,7 @@ from app.models.estrutura_produto import EstruturaProduto
 from app.models.produto import Produto
 from app.models.movimentacao_estoque import MovimentacaoEstoque
 
-router = APIRouter(prefix="/op", tags=["Ordens de Produção"])
+router = APIRouter(prefix="/op", tags=["Ordens de Producao"])
 
 FLUXO = ["SEPARACAO", "ELETRONICA", "MONTAGEM", "CALIBRACAO", "QUALIDADE", "EXPEDICAO", "FINALIZADA"]
 
@@ -18,7 +18,6 @@ class OrdemProducaoCreate(BaseModel):
     quantidade: Optional[float] = 1
     prioridade: Optional[str] = "MEDIA"
     observacao: Optional[str] = None
-    data_previsao: Optional[str] = None
 
 @router.get("/")
 def listar():
@@ -34,25 +33,27 @@ def buscar(id: int):
 def criar_op(dados: OrdemProducaoCreate):
     db: Session = SessionLocal()
 
-    # Verifica BOM se produto informado
+    # Verifica BOM apenas se produto informado E tiver estrutura
     if dados.produto_id:
         estrutura = db.query(EstruturaProduto).filter(
             EstruturaProduto.produto_pai_id == dados.produto_id
         ).all()
 
         if estrutura:
+            # Valida estoque
             for item in estrutura:
                 componente = db.query(Produto).filter(Produto.id == item.componente_id).first()
                 if componente:
-                    total = item.quantidade * dados.quantidade
-                    if componente.estoque_atual < total:
+                    total = float(item.quantidade) * float(dados.quantidade)
+                    if float(componente.estoque_atual) < total:
                         return {"erro": f"Estoque insuficiente: {componente.descricao}"}
 
+            # Baixa estoque
             for item in estrutura:
                 componente = db.query(Produto).filter(Produto.id == item.componente_id).first()
                 if componente:
-                    total = item.quantidade * dados.quantidade
-                    componente.estoque_atual -= total
+                    total = float(item.quantidade) * float(dados.quantidade)
+                    componente.estoque_atual = float(componente.estoque_atual) - total
                     mov = MovimentacaoEstoque(
                         produto_id=componente.id,
                         tipo="PRODUCAO",
@@ -88,16 +89,16 @@ def proximo_setor(id: int):
         posicao = FLUXO.index(setor_atual)
         if posicao < len(FLUXO) - 1:
             op.setor_atual = FLUXO[posicao + 1]
-            op.status = "EM_PRODUCAO" if op.setor_atual != "FINALIZADA" else "FINALIZADA"
+            op.status = "FINALIZADA" if op.setor_atual == "FINALIZADA" else "EM_PRODUCAO"
         else:
             op.setor_atual = "FINALIZADA"
             op.status = "FINALIZADA"
-        db.commit()
-        return {"id": op.id, "setor_atual": op.setor_atual, "status": op.status}
     except ValueError:
-        op.setor_atual = FLUXO[0]
-        db.commit()
-        return {"id": op.id, "setor_atual": op.setor_atual, "status": op.status}
+        op.setor_atual = "SEPARACAO"
+        op.status = "EM_PRODUCAO"
+
+    db.commit()
+    return {"id": op.id, "setor_atual": op.setor_atual, "status": op.status}
 
 @router.delete("/{id}")
 def deletar(id: int):

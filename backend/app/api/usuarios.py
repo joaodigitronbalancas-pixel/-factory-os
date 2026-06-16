@@ -4,6 +4,7 @@ from app.core.database import SessionLocal
 from app.models.usuario import Usuario
 from app.core.security import gerar_hash
 from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
@@ -11,12 +12,13 @@ class UsuarioCreate(BaseModel):
     nome: str
     email: str
     senha: str
-    perfil: str = "COMERCIAL"
+    perfil: Optional[str] = "COMERCIAL"
 
 @router.get("/")
 def listar():
     db: Session = SessionLocal()
-    return db.query(Usuario).all()
+    usuarios = db.query(Usuario).all()
+    return [{"id": u.id, "nome": u.nome, "email": u.email, "perfil": u.perfil, "ativo": u.ativo} for u in usuarios]
 
 @router.post("/")
 def criar(dados: UsuarioCreate):
@@ -30,4 +32,4 @@ def criar(dados: UsuarioCreate):
     db.add(usuario)
     db.commit()
     db.refresh(usuario)
-    return usuario
+    return {"id": usuario.id, "nome": usuario.nome, "email": usuario.email, "perfil": usuario.perfil}

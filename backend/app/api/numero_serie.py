@@ -1,26 +1,32 @@
 from fastapi import APIRouter
-from sqlalchemy import text
-from app.core.database import engine
+from sqlalchemy.orm import Session
+from app.core.database import SessionLocal
+from app.models.numero_serie import NumeroSerie
+from pydantic import BaseModel
+from typing import Optional
 
-router = APIRouter(
-    prefix="/numero-serie",
-    tags=["Numero Serie"]
-)
+router = APIRouter(prefix="/numero-serie", tags=["Numero Serie"])
 
-@router.get("")
+class NumeroSerieCreate(BaseModel):
+    numero_serie: str
+    produto_id: Optional[int] = None
+    op_id: Optional[int] = None
+
+@router.get("/")
 def listar():
+    db: Session = SessionLocal()
+    return db.query(NumeroSerie).all()
 
-    with engine.connect() as conn:
+@router.post("/")
+def criar(dados: NumeroSerieCreate):
+    db: Session = SessionLocal()
+    ns = NumeroSerie(**dados.model_dump())
+    db.add(ns)
+    db.commit()
+    db.refresh(ns)
+    return ns
 
-        dados = conn.execute(
-            text("""
-                SELECT *
-                FROM numeros_serie
-                ORDER BY id DESC
-            """)
-        )
-
-        return [
-            dict(row._mapping)
-            for row in dados
-        ]
+@router.get("/{numero}")
+def buscar(numero: str):
+    db: Session = SessionLocal()
+    return db.query(NumeroSerie).filter(NumeroSerie.numero_serie == numero).first()

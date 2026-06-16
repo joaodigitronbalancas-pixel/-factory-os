@@ -15,6 +15,7 @@ from app.api.fornecedores import router as fornecedores_router
 from app.api.assistencia import router as assistencia_router
 from app.api.qualidade import router as qualidade_router
 from app.api.pedidos import router as pedidos_router
+from app.api.pedidos import router as pedidos_router
 
 app = FastAPI(title="Factory OS", version="4.0.0")
 
@@ -40,6 +41,7 @@ app.include_router(estrutura_router)
 app.include_router(fornecedores_router)
 app.include_router(assistencia_router)
 app.include_router(qualidade_router)
+app.include_router(pedidos_router)
 app.include_router(pedidos_router)
 
 @app.get("/")

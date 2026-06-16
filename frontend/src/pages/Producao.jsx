@@ -1,99 +1,96 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
 
-export default function Produtos() {
-  const [produtos, setProdutos] = useState([]);
-  const [busca, setBusca] = useState("");
-  const [mostrarForm, setMostrarForm] = useState(false);
-  const [form, setForm] = useState({ codigo: "", descricao: "", unidade: "UN", estoque_atual: 0, estoque_minimo: 0, preco_custo: 0, preco_venda: 0 });
+const FLUXO = ["SEPARACAO","ELETRONICA","MONTAGEM","CALIBRACAO","QUALIDADE","EXPEDICAO","FINALIZADA"];
+const COR = { SEPARACAO:"#f59e0b",ELETRONICA:"#8b5cf6",MONTAGEM:"#f97316",CALIBRACAO:"#06b6d4",QUALIDADE:"#84cc16",EXPEDICAO:"#10b981",FINALIZADA:"#6b7280",ABERTA:"#3b82f6" };
+
+export default function Producao() {
+  const [ops, setOps] = useState([]);
+  const [filtro, setFiltro] = useState("todas");
 
   useEffect(() => { carregar(); }, []);
 
   async function carregar() {
-    const res = await api.get("/produtos");
-    setProdutos(res.data);
+    try { const res = await api.get("/op"); setOps(res.data); } catch (e) { console.error(e); }
   }
 
-  async function salvar() {
-    try {
-      await api.post("/produtos", form);
-      setMostrarForm(false);
-      setForm({ codigo: "", descricao: "", unidade: "UN", estoque_atual: 0, estoque_minimo: 0, preco_custo: 0, preco_venda: 0 });
-      carregar();
-    } catch (e) {
-      alert("Erro ao salvar produto");
-    }
+  async function avancar(id) {
+    try { await api.post(`/op/${id}/proximo-setor`); carregar(); } catch (e) { alert("Erro ao avançar"); }
   }
 
-  const filtrados = produtos.filter(p =>
-    p.descricao?.toLowerCase().includes(busca.toLowerCase()) ||
-    p.codigo?.toLowerCase().includes(busca.toLowerCase())
-  );
+  const filtradas = ops.filter(op => {
+    if (filtro === "todas") return true;
+    if (filtro === "andamento") return op.status === "EM_PRODUCAO";
+    if (filtro === "abertas") return op.status === "ABERTA";
+    if (filtro === "finalizadas") return op.status === "FINALIZADA";
+    return true;
+  });
 
-  const estiloTh = { background: "#1e293b", color: "#fff", padding: "10px 12px", textAlign: "left" };
-  const estiloTd = { padding: "10px 12px", borderBottom: "1px solid #e2e8f0" };
+  const th = { background: "#1e293b", color: "#fff", padding: "10px 12px", textAlign: "left" };
+  const td = { padding: "10px 12px", borderBottom: "1px solid #e2e8f0" };
 
   return (
     <div style={{ padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ margin: 0 }}>📦 Produtos</h1>
-        <button onClick={() => setMostrarForm(!mostrarForm)} style={{
-          background: "#2563eb", color: "#fff", border: "none",
-          borderRadius: 6, padding: "10px 20px", cursor: "pointer", fontWeight: "bold"
-        }}>
-          {mostrarForm ? "Cancelar" : "+ Novo Produto"}
-        </button>
+      <h1 style={{ marginBottom: 20 }}>⚙️ Produção</h1>
+
+      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+        {[
+          { label: "Total OPs", valor: ops.length, cor: "#3b82f6" },
+          { label: "Em Produção", valor: ops.filter(o => o.status === "EM_PRODUCAO").length, cor: "#f59e0b" },
+          { label: "Finalizadas", valor: ops.filter(o => o.status === "FINALIZADA").length, cor: "#22c55e" },
+          { label: "Abertas", valor: ops.filter(o => o.status === "ABERTA").length, cor: "#8b5cf6" },
+        ].map(card => (
+          <div key={card.label} style={{ background: "#fff", padding: 20, borderRadius: 10, flex: 1, boxShadow: "0 2px 8px rgba(0,0,0,0.08)", borderLeft: `4px solid ${card.cor}` }}>
+            <p style={{ color: "#64748b", margin: 0, fontSize: 13 }}>{card.label}</p>
+            <h2 style={{ color: card.cor, margin: "4px 0 0" }}>{card.valor}</h2>
+          </div>
+        ))}
       </div>
 
-      {mostrarForm && (
-        <div style={{ background: "#fff", padding: 20, borderRadius: 10, marginBottom: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-          <h3>Novo Produto</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {[["codigo","Código"],["descricao","Descrição"],["unidade","Unidade"],["estoque_atual","Estoque Atual"],["estoque_minimo","Estoque Mínimo"],["preco_custo","Preço Custo"],["preco_venda","Preço Venda"]].map(([campo, label]) => (
-              <div key={campo}>
-                <label style={{ fontSize: 13, color: "#64748b" }}>{label}</label>
-                <input value={form[campo]} onChange={e => setForm({...form, [campo]: e.target.value})}
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #cbd5e1", marginTop: 4, boxSizing: "border-box" }} />
-              </div>
-            ))}
-          </div>
-          <button onClick={salvar} style={{
-            marginTop: 16, background: "#16a34a", color: "#fff", border: "none",
-            borderRadius: 6, padding: "10px 24px", cursor: "pointer", fontWeight: "bold"
-          }}>Salvar</button>
-        </div>
-      )}
-
-      <input placeholder="Buscar por código ou descrição..." value={busca} onChange={e => setBusca(e.target.value)}
-        style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #cbd5e1", marginBottom: 16, boxSizing: "border-box" }} />
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {[["todas","Todas"],["abertas","Abertas"],["andamento","Em Produção"],["finalizadas","Finalizadas"]].map(([val, label]) => (
+          <button key={val} onClick={() => setFiltro(val)} style={{ padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontWeight: filtro === val ? "bold" : "normal", background: filtro === val ? "#1e293b" : "#e2e8f0", color: filtro === val ? "#fff" : "#64748b" }}>
+            {label}
+          </button>
+        ))}
+      </div>
 
       <div style={{ background: "#fff", borderRadius: 10, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr>
-              {["Código","Descrição","Un","Estoque Atual","Estoque Mín.","Preço Custo","Preço Venda","Status"].map(h => (
-                <th key={h} style={estiloTh}>{h}</th>
-              ))}
-            </tr>
+            <tr>{["OP","Qtd","Prioridade","Setor Atual","Status","Fluxo","Ações"].map(h => <th key={h} style={th}>{h}</th>)}</tr>
           </thead>
           <tbody>
-            {filtrados.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Nenhum produto encontrado</td></tr>
-            ) : filtrados.map(p => (
-              <tr key={p.id} style={{ background: p.id % 2 === 0 ? "#f8fafc" : "#fff" }}>
-                <td style={estiloTd}><code>{p.codigo}</code></td>
-                <td style={estiloTd}><strong>{p.descricao}</strong></td>
-                <td style={estiloTd}>{p.unidade}</td>
-                <td style={{ ...estiloTd, color: p.estoque_atual <= p.estoque_minimo ? "#dc2626" : "#16a34a", fontWeight: "bold" }}>
-                  {p.estoque_atual}
-                </td>
-                <td style={estiloTd}>{p.estoque_minimo}</td>
-                <td style={estiloTd}>R$ {Number(p.preco_custo || 0).toFixed(2)}</td>
-                <td style={estiloTd}>R$ {Number(p.preco_venda || 0).toFixed(2)}</td>
-                <td style={estiloTd}>
-                  <span style={{ background: p.estoque_atual <= p.estoque_minimo ? "#fee2e2" : "#dcfce7", color: p.estoque_atual <= p.estoque_minimo ? "#dc2626" : "#16a34a", padding: "2px 10px", borderRadius: 20, fontSize: 12 }}>
-                    {p.estoque_atual <= p.estoque_minimo ? "⚠️ Baixo" : "✅ OK"}
+            {filtradas.length === 0 ? (
+              <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Nenhuma OP encontrada</td></tr>
+            ) : filtradas.map(op => (
+              <tr key={op.id}>
+                <td style={td}><strong>{op.numero_op}</strong></td>
+                <td style={td}>{op.quantidade}</td>
+                <td style={td}>
+                  <span style={{ background: op.prioridade === "URGENTE" ? "#fee2e2" : op.prioridade === "ALTA" ? "#fef3c7" : "#f0fdf4", color: op.prioridade === "URGENTE" ? "#dc2626" : op.prioridade === "ALTA" ? "#d97706" : "#16a34a", padding: "2px 10px", borderRadius: 20, fontSize: 12, fontWeight: "bold" }}>
+                    {op.prioridade}
                   </span>
+                </td>
+                <td style={td}>
+                  <span style={{ background: COR[op.setor_atual] || "#e2e8f0", color: "#fff", padding: "3px 12px", borderRadius: 20, fontSize: 12, fontWeight: "bold" }}>
+                    {op.setor_atual}
+                  </span>
+                </td>
+                <td style={td}>{op.status}</td>
+                <td style={td}>
+                  <div style={{ display: "flex", gap: 3 }}>
+                    {FLUXO.map(s => (
+                      <div key={s} style={{ width: 8, height: 8, borderRadius: "50%", background: FLUXO.indexOf(s) <= FLUXO.indexOf(op.setor_atual) ? (COR[s] || "#3b82f6") : "#e2e8f0" }} title={s} />
+                    ))}
+                  </div>
+                </td>
+                <td style={td}>
+                  {op.status !== "FINALIZADA" && (
+                    <button onClick={() => avancar(op.id)} style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>
+                      ▶ Avançar
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
