@@ -1,55 +1,35 @@
-
 import axios from "axios";
 
 const api = axios.create({
   baseURL: "http://127.0.0.1:8000"
 });
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export default api;
 
-// outras funções...
-
-const API_URL = "http://127.0.0.1:8000";
-
 export async function getDashboard() {
-  const response = await fetch(
-    `${API_URL}/dashboard/resumo`
-  );
-  return response.json();
+  const res = await api.get("/dashboard/industrial");
+  return res.data;
 }
 
 export async function getClientes() {
-  const response = await fetch(
-    `${API_URL}/clientes`
-  );
-  return response.json();
+  const res = await api.get("/clientes");
+  return res.data;
 }
 
 export async function getProdutos() {
-  const response = await fetch(
-    `${API_URL}/produtos`
-  );
-  return response.json();
+  const res = await api.get("/produtos");
+  return res.data;
 }
 
 export async function getOrdens() {
-  const response = await fetch(
-    `${API_URL}/ordens-producao`
-  );
-  return response.json();
+  const res = await api.get("/ordens-producao");
+  return res.data;
 }
-
-import axios from "axios";
-
-const api = axios.create({
-  baseURL: "http://127.0.0.1:8000"
-});
-
-export default api;
-
-import axios from "axios";
-
-export default axios.create({
-  baseURL: "http://127.0.0.1:8000"
-});
-
