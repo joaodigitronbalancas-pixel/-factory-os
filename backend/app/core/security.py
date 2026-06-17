@@ -8,11 +8,16 @@ pwd_context = CryptContext(
 def gerar_hash(senha: str):
     return pwd_context.hash(senha)
 
-def verificar_senha(
-    senha,
-    hash_senha
-):
-    return pwd_context.verify(
+def verificar_senha(senha, hash_senha):
+
+    print("SENHA DIGITADA:", senha)
+    print("HASH BANCO:", hash_senha)
+
+    resultado = pwd_context.verify(
         senha,
         hash_senha
     )
+
+    print("RESULTADO:", resultado)
+
+    return resultado
